@@ -5,6 +5,7 @@
 Standard library only. No network. Deterministic: the output is a
 byte-for-byte copy of entry.png, so every run writes identical bytes.
 """
+import hashlib
 import os
 import struct
 import sys
@@ -60,6 +61,8 @@ def check_png(blob):
             if size != 0:
                 die("IEND chunk is not empty")
             got_iend = True
+            if offset + 12 + size != len(blob):
+                die("trailing data after the PNG IEND chunk")
             break
         offset += 12 + size
     if not got_idat:
@@ -82,7 +85,14 @@ def main():
     out = os.path.join(out_dir, "entry.png")
     with open(out, "wb") as fh:
         fh.write(blob)
-    print(f"wrote {out}: {width}x{height}, {len(blob)} bytes")
+    # Read the output back and verify it is byte-identical to the validated
+    # source: a truncated or corrupted write must fail loudly, not ship.
+    with open(out, "rb") as fh:
+        written = fh.read()
+    if written != blob:
+        die(f"wrote {out} but the bytes on disk do not match entry.png")
+    digest = hashlib.sha256(blob).hexdigest()
+    print(f"wrote {out}: {width}x{height}, {len(blob)} bytes, sha256 {digest}")
 
 
 if __name__ == "__main__":
